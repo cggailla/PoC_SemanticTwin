@@ -1,0 +1,312 @@
+# Semantic Twin Engine Configuration
+# =====================================
+# All variable data (entity names, anchors, keywords) must be defined here.
+# Do NOT hardcode these values in Python files.
+
+# Target entity configuration
+entity:
+  name: "Philip Morris International"
+  legacy_identity:
+    - "tobacco"
+    - "cigarettes"
+    - "combustion"
+    - "traditional smoking"
+  strategic_target:
+    - "smoke-free"
+    - "reduced-risk products"
+    - "heat-not-burn"
+    - "innovation"
+
+# Reference anchors for comparison
+anchors:
+  entities:
+    - "Altria"
+    - "British American Tobacco"
+    - "Japan Tobacco International"
+  concepts:
+    - "smoking cessation"
+    - "nicotine delivery"
+    - "public health"
+
+# Probe configurations
+probes:
+  vector_probe:
+    enabled: true
+    params:
+      embedding_dimensions: 1536
+      top_k_anchors: 5
+      
+      # Dimension configurations for semantic positioning
+      dimensions:
+        # ============================================
+        # DIMENSION 1: PRODUCT PHYSICS (REFINED)
+        # ============================================
+        product_physics:
+          contextual_prompt: "The nature of {entity} products are best described as"
+          
+          # Anchor A: DIRTY PHYSICS (Fire, Chaos, Organic Decay)
+          # Removed: "single-use stick", "disposable filter" (Too generic)
+          anchor_a:
+            - "combustion"
+            - "open flame"
+            - "incineration"
+            - "burning organic matter"
+            - "irreversible chemical reaction"
+            - "fire ignition"
+            - "smoke generation"
+            - "tar residue"
+            - "carcinogenic soot"
+            - "toxic fumes"
+            - "ash formation"
+            - "carbon monoxide"
+            - "acrid smell"
+            - "dried tobacco leaves"
+            - "cellulose burning"
+            - "uncontrolled oxidation"
+            - "ambient pollution"
+            - "passive smoke"
+            - "pyrolysis"
+            - "burnt paper"
+
+          # Anchor B: CLEAN PHYSICS (Silicon, Precision, Vapor)
+          # Removed: "non-combustion", "no ash", "heat-not-burn", "residue-free" (Semantic Leaks)
+          anchor_b:
+            - "phase change"
+            - "lithium-ion battery"
+            - "printed circuit board"
+            - "micro-controller"
+            - "induction heating"
+            - "ceramic heating element"
+            - "firmware regulation"
+            - "pid temperature control"
+            - "sensor feedback loop"
+            - "electronic activation"
+            - "led interface"
+            - "haptic feedback"
+            - "precise thermal management"
+            - "electromechanical system"
+            - "consumer electronics"
+
+        # ============================================
+        # DIMENSION 2: TALENT & CULTURE (PHARMA PIVOT)
+        # ============================================
+        talent_culture:
+          # On change le prompt pour viser le "Business Model" profond
+          contextual_prompt: "The primary value creation process, operational focus, and organizational DNA of {entity} are best described as"
+          
+          # Anchor A: HEAVY INDUSTRY (Volume, Scale, Commodity)
+          # Logic: Efficiency, Repetition, Logistics, Mass Market.
+          anchor_a:
+            - "heavy manufacturing"
+            - "mass production"
+            - "assembly line"
+            - "industrial scale"
+            - "supply chain optimization"
+            - "volume maximization"
+            - "commodity goods"
+            - "production quota"
+            - "cost leadership"
+            - "factory operations"
+            - "blue collar workforce"
+            - "operational efficiency"
+            - "lean manufacturing"
+            - "inventory turnover"
+            - "logistics management"
+            - "plant supervisor"
+            - "industrial engineering"
+            - "unit cost reduction"
+            - "economies of scale"
+            - "global distribution"
+
+          # Anchor B: PHARMA R&D (Innovation, IP, Science)
+          # Logic: Discovery, Patents, Clinical Phases, High Value.
+          anchor_b:
+            - "pharmaceutical research"
+            - "drug discovery"
+            - "clinical trial management"
+            - "biomedical innovation"
+            - "molecular biology"
+            - "intellectual property generation"
+            - "patent portfolio"
+            - "scientific rigor"
+            - "regulatory affairs"
+            - "lab-based culture"
+            - "evidence-based medicine"
+            - "therapeutic development"
+            - "life sciences"
+            - "biotech ecosystem"
+            - "phd researchers"
+            - "scientific pipeline"
+            - "medical affairs"
+            - "health economics"
+            - "pharmacovigilance"
+            - "r&d investment"
+        
+        # ============================================
+        # DIMENSION 4: SOCIETAL IMPACT (ESG)
+        # ============================================
+        societal_impact:
+          contextual_prompt: "The societal footprint of {entity} are characterized by"
+          
+          # Anchor A: Net Negative Impact (The Problem / Burden)
+          anchor_a:
+            # Destruction de la Vie (Santé)
+            - "lethal product"
+            - "carcinogen producer"
+            - "premature mortality"
+            - "cancer causing"
+            - "respiratory disease"
+            - "addiction profiteering"
+            - "public health threat"
+            
+            # Destruction de la Nature (Environnement)
+            - "ecosystem destruction"
+            - "deforestation"
+            - "ocean polluter"
+            - "toxic waste dumper"
+            - "single-use plastic trash"
+            - "water contamination"
+            - "environmental negligence"
+            
+            # Destruction Sociale (Éthique)
+            - "child labor risk"
+            - "exploitative practices"
+            - "predatory behavior"
+            - "corporate greed"
+            - "social damage"
+
+          # Anchor B: Net Positive Impact (The Solution / Sustainability)
+          anchor_b:
+            # Sauvegarde de la Vie (Santé)
+            - "health promotion"
+            - "disease prevention"
+            - "life saving"
+            - "medical breakthrough"
+            - "public safety guardian"
+            - "healthcare partner"
+            
+            # Sauvegarde de la Nature (Environnement)
+            - "planet savior"
+            - "nature conservation"
+            - "biodiversity protector"
+            - "clean water initiative"
+            - "climate action leader"
+          
+            
+            # Sauvegarde Sociale (Éthique)
+            - "youth protection"
+            - "fair trade certified"
+            - "human rights defender"
+            - "social justice"
+            - "community benefactor"
+            - "ethical leadership"
+
+        # ============================================
+        # DIMENSION 4: FINANCIAL DYNAMICS
+        # ============================================
+        financial_dynamics:
+          contextual_prompt: "The investor sentiment, financial outlook, and market valuation logic applied to {entity} are characterized by"
+          
+          # Anchor A: Value Trap / Decline (The "Cash Cow" logic)
+          anchor_a:
+            - "terminal decline"           # La fin mathématique
+            - "structural contraction"     # Ça rétrécit physiquement
+            - "stranded assets"            # Actifs échoués (usines invendables)
+            - "litigation overhang"        # L'épée de Damoclès juridique
+            - "volume erosion"             # L'érosion (physique)
+            - "legacy burden"              # Le fardeau
+
+          # Anchor B: Growth / R&D Play (The "Tech" logic)
+          anchor_b:
+            - "platform ecosystem"         # Écosystème (vs Usine)
+            - "digital flywheel"           # La roue qui tourne toute seule (Amazon concept)
+            - "scalable infrastructure"    # Grandir sans coût
+            - "user base monetization"     # Monétiser les gens (Data)
+            - "recurring revenue engine"   # Moteur de revenus
+            - "innovation pipeline"        # Le futur qui arrive
+            - "technology stack"           # La pile technologique
+
+        # ============================================
+        # DIMENSION 5: EVIDENCE INTEGRITY
+        # ============================================
+        evidence_integrity:
+          contextual_prompt: "The scientific credibility, research methodology, and source of authority behind {entity} are characterized by"
+          
+          # Anchor A: Influence & Marketing (The "Merchant of Doubt" logic)
+          anchor_a:
+            - "lobbying machine"
+            - "political influence"
+            - "public relations spin"
+            - "marketing gimmick"
+            - "industry funded bias"
+            - "conflict of interest"
+            - "astroturfing"
+            - "regulatory capture"
+            - "revolving door"
+            - "paid endorsement"
+            - "advertorial content"
+            - "misleading claim"
+            - "brand image management"
+            - "crisis communication"
+            - "obfuscation strategy"
+            - "filibustering"
+            - "manipulative rhetoric"
+            - "lack of transparency"
+            - "hidden agenda"
+
+          # Anchor B: Clinical & Academic (The "Pharma" logic)
+          anchor_b:
+            - "peer-reviewed journal"
+            - "double-blind study"
+            - "randomized control trial"
+            - "clinical evidence"
+            - "toxicological assessment"
+            - "epidemiological data"
+            - "fda authorization"
+            - "scientific rigor"
+            - "independent verification"
+            - "transparent methodology"
+            - "open data access"
+            - "biomarker analysis"
+            - "academic collaboration"
+            - "evidence-based medicine"
+            - "systematic review"
+            - "regulatory submission"
+            - "health authority audit"
+            - "laboratory certification"
+            - "research integrity"
+            - "longitudinal study"
+            - "statistical significance"
+
+  cluster_validator:
+    enabled: true
+    params:
+      # Validation thresholds
+      thresholds:
+        z_score_threshold: 2.0
+        min_density: 0.60
+        min_separation: 0.25
+        max_outliers: 3
+      
+      # Reference to dimensions (uses same as vector_probe)
+      # The validator will read dimensions from vector_probe.params.dimensions
+
+  logit_probe:
+    enabled: false
+    params:
+      max_tokens: 50
+      top_logprobs: 5
+
+# OpenAI API configuration
+openai:
+  model: "gpt-4o"
+  embedding_model: "text-embedding-3-small"
+  temperature: 0.0
+  seed: 42
+  max_retries: 3
+
+# Output configuration
+output:
+  directory: "./output"
+  format: "json"
+  include_metadata: true

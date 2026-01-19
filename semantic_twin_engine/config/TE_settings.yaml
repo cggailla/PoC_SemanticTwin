@@ -1,0 +1,296 @@
+# Semantic Twin Engine Configuration
+# =====================================
+# Configuration adapted for TotalEnergies
+# Context: Transition from Oil Major to Multi-Energy Company
+
+# Target entity configuration
+entity:
+  name: "TotalEnergies"
+  legacy_identity:
+    - "oil major"
+    - "petroleum"
+    - "fossil fuels"
+    - "big oil"
+    - "gas station"
+  strategic_target:
+    - "multi-energy"
+    - "renewables"
+    - "net zero"
+    - "electricity provider"
+    - "integrated power"
+
+# Reference anchors for comparison
+anchors:
+  entities:
+    - "ExxonMobil"
+    - "Shell"
+    - "BP"
+    - "Chevron"
+    - "Orsted" # Added a pure renewable player for contrast
+  concepts:
+    - "decarbonization"
+    - "energy transition"
+    - "carbon intensity"
+
+# Probe configurations
+probes:
+  vector_probe:
+    enabled: true
+    params:
+      embedding_dimensions: 1536
+      top_k_anchors: 5
+      
+      # Dimension configurations for semantic positioning
+      dimensions:
+        # ============================================
+        # DIMENSION 1: PRODUCT PHYSICS (MOLECULES VS ELECTRONS)
+        # ============================================
+        product_physics:
+          contextual_prompt: "The physical nature, production process, and output of {entity} operations are best described as"
+          
+          # Anchor A: EXTRACTION & COMBUSTION (Heavy, Dirty, Finite)
+          # Logic: Digging stuff up and burning it.
+          anchor_a:
+            - "crude oil extraction"
+            - "offshore drilling"
+            - "hydrocarbon combustion"
+            - "refining process"
+            - "fractional distillation"
+            - "petrochemicals"
+            - "heavy fuel oil"
+            - "natural gas flaring"
+            - "internal combustion engine fuel"
+            - "bitumen extraction"
+            - "hydraulic fracturing"
+            - "carbon emissions"
+            - "oil sands"
+            - "fossil fuel reserves"
+            - "pipeline transport"
+            - "sludge accumulation"
+            - "sulfur dioxide"
+            - "barrel of oil equivalent"
+            - "liquid fuels"
+            - "exhaust fumes"
+
+          # Anchor B: GENERATION & ELECTRONS (Light, Clean, Infinite)
+          # Logic: Capturing natural flows and managing grids.
+          anchor_b:
+            - "photovoltaic generation"
+            - "wind turbine aerodynamics"
+            - "offshore wind farm"
+            - "solar irradiance"
+            - "battery energy storage"
+            - "green hydrogen electrolysis"
+            - "electric vehicle charging"
+            - "grid integration"
+            - "renewable capacity"
+            - "low-carbon electrons"
+            - "biofuel synthesis"
+            - "carbon capture and storage"
+            - "power purchase agreement"
+            - "gigawatt scale"
+            - "energy efficiency"
+            - "sustainable aviation fuel"
+            - "circular economy"
+            - "biogas production"
+            - "utility scale"
+            - "intermittency management"
+
+        # ============================================
+        # DIMENSION 2: TALENT & CULTURE (GEOLOGISTS VS TRADERS)
+        # ============================================
+        talent_culture:
+          contextual_prompt: "The primary skill sets, operational focus, and organizational DNA of {entity} are best described as"
+          
+          # Anchor A: THE OIL RIG (Exploration, Hazard, Capex)
+          # Logic: High risk, physical danger, remote locations, engineering heavy.
+          anchor_a:
+            - "petroleum engineering"
+            - "geological exploration"
+            - "rig operator"
+            - "process safety management"
+            - "high-risk environment"
+            - "capital intensive projects"
+            - "upstream operations"
+            - "drilling supervisor"
+            - "pipeline maintenance"
+            - "refinery technician"
+            - "expatriate culture"
+            - "resource extraction"
+            - "field operations"
+            - "industrial hazards"
+            - "seismic analysis"
+            - "reservoir management"
+            - "heavy machinery"
+            - "centralized command"
+
+          # Anchor B: THE ENERGY HUB (Service, Digital, Agile)
+          # Logic: Customer facing, software driven, trading, utility model.
+          anchor_b:
+            - "power trading"
+            - "renewable project finance"
+            - "customer experience"
+            - "digital factory"
+            - "agile methodology"
+            - "smart grid management"
+            - "energy-as-a-service"
+            - "b2c marketing"
+            - "data science optimization"
+            - "integrated power player"
+            - "utility management"
+            - "software development"
+            - "electric mobility services"
+            - "carbon trading desk"
+            - "innovation incubator"
+            - "start-up partnership"
+            - "decentralized energy"
+            - "green desk"
+
+        # ============================================
+        # DIMENSION 3: SOCIETAL IMPACT (CLIMATE VILLAIN VS HERO)
+        # ============================================
+        societal_impact:
+          contextual_prompt: "The societal footprint and environmental reputation of {entity} are characterized by"
+          
+          # Anchor A: CLIMATE CRISIS (The Problem)
+          anchor_a:
+            - "climate change driver"
+            - "greenhouse gas emissions"
+            - "oil spill disaster"
+            - "ecological destruction"
+            - "climate denial history"
+            - "polluting industry"
+            - "biodiversity loss"
+            - "air quality degradation"
+            - "environmental litigation"
+            - "fossil fuel lobbying"
+            - "ocean contamination"
+            - "plastic pollution"
+            - "community displacement"
+            - "toxic waste"
+            - "planetary boundary violation"
+
+          # Anchor B: ENERGY TRANSITION (The Solution)
+          anchor_b:
+            - "net zero ambition"
+            - "energy transition leader"
+            - "renewable investment"
+            - "sustainable development goals"
+            - "affordable clean energy"
+            - "carbon neutrality"
+            - "just transition"
+            - "emissions reduction targets"
+            - "nature based solutions"
+            - "access to energy"
+            - "climate action partner"
+            - "green taxonomy alignment"
+            - "biodiversity preservation"
+            - "responsible energy major"
+            - "stakeholder engagement"
+
+        # ============================================
+        # DIMENSION 4: FINANCIAL DYNAMICS (BARREL VS GRID)
+        # ============================================
+        financial_dynamics:
+          contextual_prompt: "The investor sentiment, valuation model, and market risk profile of {entity} are characterized by"
+          
+          # Anchor A: COMMODITY CYCLE (Volatile, Finite)
+          # Logic: Dependent on Brent price, "Sin Stock".
+          anchor_a:
+            - "oil price dependency"
+            - "cyclical stock"
+            - "commodity volatility"
+            - "stranded asset risk"
+            - "geopolitical risk premium"
+            - "windfall tax target"
+            - "fossil fuel divestment"
+            - "declining reserves"
+            - "legacy liability"
+            - "yield co"
+            - "capex heavy"
+            - "terminal value risk"
+            - "regulatory headwinds"
+
+          # Anchor B: INFRASTRUCTURE GROWTH (Stable, Recurring)
+          # Logic: Utility model, predictable cash flows, growth multiple.
+          anchor_b:
+            - "recurring revenue model"
+            - "regulated asset base"
+            - "infrastructure valuation"
+            - "stable cash flows"
+            - "growth stock potential"
+            - "green bond eligibility"
+            - "power purchase agreements"
+            - "esg investable"
+            - "dividend aristocrat"
+            - "long-term visibility"
+            - "valuation re-rating"
+            - "integrated margin"
+            - "capital allocation discipline"
+
+        # ============================================
+        # DIMENSION 5: EVIDENCE INTEGRITY
+        # ============================================
+        evidence_integrity:
+          contextual_prompt: "The credibility of {entity}'s sustainability claims and reporting are characterized by"
+          
+          # Anchor A: GREENWASHING (Marketing, Obfuscation)
+          anchor_a:
+            - "greenwashing"
+            - "misleading advertising"
+            - "double counting"
+            - "marketing spin"
+            - "lobbying against regulation"
+            - "opaque reporting"
+            - "selective disclosure"
+            - "unverified claims"
+            - "brand polishing"
+            - "carbon offset controversy"
+            - "astroturfing"
+            - "regulatory fines"
+            - "pr stunt"
+
+          # Anchor B: SCIENTIFIC ACCOUNTABILITY (Audit, Science)
+          anchor_b:
+            - "science based targets (SBTi)"
+            - "scope 1 2 3 reporting"
+            - "audited carbon footprint"
+            - "task force on climate-related financial disclosures"
+            - "third-party verification"
+            - "transparent methodology"
+            - "taxonomy alignment"
+            - "rigorous kpi tracking"
+            - "independent certification"
+            - "international energy agency alignment"
+            - "ghg protocol compliance"
+            - "sustainability rating"
+            - "scientific collaboration"
+
+  cluster_validator:
+    enabled: true
+    params:
+      thresholds:
+        z_score_threshold: 2.0
+        min_density: 0.60
+        min_separation: 0.30
+        max_outliers: 3
+
+  logit_probe:
+    enabled: false
+    params:
+      max_tokens: 50
+      top_logprobs: 5
+
+# OpenAI API configuration
+openai:
+  model: "gpt-4o"
+  embedding_model: "text-embedding-3-small"
+  temperature: 0.0
+  seed: 42
+  max_retries: 3
+
+# Output configuration
+output:
+  directory: "./output/totalenergies"
+  format: "json"
+  include_metadata: true
