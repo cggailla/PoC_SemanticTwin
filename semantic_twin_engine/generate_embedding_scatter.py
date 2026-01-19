@@ -6,6 +6,7 @@ showing the entity position between Legacy and Strategy centroids.
 """
 
 import sys
+import webbrowser
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -426,6 +427,7 @@ def main(dimension_name: str = "product_physics") -> int:
     
     print(f"\n✅ Saved to: {output_path}")
     print(f"\nOpen in browser: {output_path.absolute()}")
+    webbrowser.open(str(output_path.absolute()))
     
     return 0
 

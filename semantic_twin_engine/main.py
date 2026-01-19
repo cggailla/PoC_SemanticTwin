@@ -9,6 +9,7 @@ the audit pipeline with visualization.
 import json
 import logging
 import sys
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 
@@ -149,6 +150,7 @@ def main() -> int:
         
         if visual_path:
             logger.info("Visual report saved to: %s", visual_path)
+            webbrowser.open(str(visual_path))
         
         return 0
         
