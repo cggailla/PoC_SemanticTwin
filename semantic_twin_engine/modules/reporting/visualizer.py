@@ -23,15 +23,17 @@ logger = logging.getLogger(__name__)
 
 # Color palette
 COLORS = {
-    "legacy": "#8B4513",
-    "legacy_light": "rgba(139, 69, 19, 0.5)",
-    "strategy": "#2E8B57",
-    "strategy_light": "rgba(46, 139, 87, 0.5)",
-    "entity": "#1E90FF",
+    "legacy": "#8B4513",       # Saddle brown
+    "legacy_light": "rgba(139, 69, 19, 0.3)",
+    "strategy": "#2E8B57",     # Sea green
+    "strategy_light": "rgba(46, 139, 87, 0.3)",
+    "entity": "#1E90FF",       # Dodger blue
     "neutral": "#666666",
     "axis": "#333333",
     "positive": "#2E8B57",
     "negative": "#8B4513",
+    "centroid_legacy": "#CD853F",   # Peru (darker legacy)
+    "centroid_strategy": "#228B22",  # Forest green (darker strategy)
 }
 
 
@@ -178,7 +180,7 @@ class AuditReportVisualizer(BaseProbe):
         contextual_prompt: str,
         entity_name: str,
         drift_score: float,
-    ) -> str:
+    ) -> tuple[str, dict]:
         """Create 1D axis plot for a dimension.
         
         Args:
@@ -187,10 +189,10 @@ class AuditReportVisualizer(BaseProbe):
             anchor_b: Strategy anchor terms.
             contextual_prompt: Prompt template.
             entity_name: Entity name.
-            drift_score: Pre-calculated drift score.
+            drift_score: Pre-calculated drift score (used for validation).
         
         Returns:
-            Plotly figure as HTML div.
+            Tuple of (Plotly figure as HTML div, Dictionary of anchor HTML lists).
         """
         # Get embeddings (uses cache)
         embeddings_a = np.array(self.get_embeddings(anchor_a))
@@ -203,138 +205,260 @@ class AuditReportVisualizer(BaseProbe):
         centroid_a = np.mean(embeddings_a, axis=0)
         centroid_b = np.mean(embeddings_b, axis=0)
         
-        # PCA to 1D
+        # Calculate cosine distances (re-calculated for annotations)
+        dist_to_legacy = self.cosine_distance(entity_embedding, centroid_a)
+        dist_to_strategy = self.cosine_distance(entity_embedding, centroid_b)
+        centroid_dist = self.cosine_distance(centroid_a, centroid_b)
+        
+        # Re-calculate drift score for plot consistency
+        axis_vector = centroid_b - centroid_a
+        midpoint = (centroid_a + centroid_b) / 2
+        entity_relative = entity_embedding - midpoint
+        axis_length_sq = np.dot(axis_vector, axis_vector)
+        
+        if axis_length_sq > 0:
+            projection = np.dot(entity_relative, axis_vector) / axis_length_sq
+            calculated_drift = float(projection * 2)
+        else:
+            calculated_drift = 0.0
+            
+        # Combine all embeddings for PCA
         all_embeddings = np.vstack([
-            embeddings_a, embeddings_b,
-            [centroid_a], [centroid_b], [entity_embedding]
+            embeddings_a,
+            embeddings_b,
+            [centroid_a],
+            [centroid_b],
+            [entity_embedding],
         ])
         
+        # Apply PCA to reduce to 1D
         pca = PCA(n_components=1)
         embeddings_1d = pca.fit_transform(all_embeddings).flatten()
         
-        n_a, n_b = len(anchor_a), len(anchor_b)
+        # Split back into groups
+        n_a = len(anchor_a)
+        n_b = len(anchor_b)
+        
         points_a = embeddings_1d[:n_a]
         points_b = embeddings_1d[n_a:n_a + n_b]
         centroid_a_1d = embeddings_1d[n_a + n_b]
         centroid_b_1d = embeddings_1d[n_a + n_b + 1]
         entity_1d = embeddings_1d[n_a + n_b + 2]
         
+        # Ensure correct orientation: Legacy (A) should be LEFT, Strategy (B) should be RIGHT
         if centroid_a_1d > centroid_b_1d:
             points_a = -points_a
             points_b = -points_b
             centroid_a_1d = -centroid_a_1d
             centroid_b_1d = -centroid_b_1d
             entity_1d = -entity_1d
-            
-        # Normalize: Legacy=-1, Strategy=+1
-        midpoint = (centroid_a_1d + centroid_b_1d) / 2
+        
+        # Normalize axis so 0 = midpoint, Legacy=-1, Strategy=+1
+        midpoint_1d = (centroid_a_1d + centroid_b_1d) / 2
         half_range = abs(centroid_b_1d - centroid_a_1d) / 2
         
         if half_range > 0:
-            norm_points_a = (points_a - midpoint) / half_range
-            norm_points_b = (points_b - midpoint) / half_range
-            norm_entity = (entity_1d - midpoint) / half_range
+            norm_points_a = (points_a - midpoint_1d) / half_range
+            norm_points_b = (points_b - midpoint_1d) / half_range
+            norm_entity = (entity_1d - midpoint_1d) / half_range
         else:
             norm_points_a = np.zeros_like(points_a)
             norm_points_b = np.zeros_like(points_b)
-            norm_entity = 0
+            norm_entity = 0.0
         
         # Create figure
         fig = go.Figure()
         
-        # Axis line
+        # Draw main axis line (from -1 to +1)
         fig.add_trace(go.Scatter(
-            x=[-1, 1], y=[0, 0],
+            x=[-1, 1],
+            y=[0, 0],
             mode="lines",
-            line=dict(color=COLORS["axis"], width=3),
-            showlegend=False, hoverinfo="skip",
+            line=dict(color=COLORS["axis"], width=4),
+            name="Semantic Axis",
+            hoverinfo="skip",
         ))
         
-        # Legacy points
-        jitter_a = np.random.uniform(-0.12, -0.04, n_a)
+        # Plot Legacy anchors (small dots below axis)
+        jitter_a = np.random.uniform(-0.15, -0.05, len(anchor_a))
         fig.add_trace(go.Scatter(
-            x=norm_points_a, y=jitter_a,
-            mode="markers",
-            marker=dict(size=7, color=COLORS["legacy"], opacity=0.6),
-            name="Legacy",
-            text=anchor_a,
-            hovertemplate="<b>%{text}</b><extra>Legacy</extra>",
-        ))
-        
-        # Strategy points
-        jitter_b = np.random.uniform(0.04, 0.12, n_b)
-        fig.add_trace(go.Scatter(
-            x=norm_points_b, y=jitter_b,
-            mode="markers",
-            marker=dict(size=7, color=COLORS["strategy"], opacity=0.6),
-            name="Strategy",
-            text=anchor_b,
-            hovertemplate="<b>%{text}</b><extra>Strategy</extra>",
-        ))
-        
-        # Centroids
-        fig.add_trace(go.Scatter(
-            x=[-1], y=[0],
-            mode="markers",
-            marker=dict(size=20, color=COLORS["legacy"], symbol="diamond", line=dict(color="white", width=2)),
-            name="Legacy Centroid",
-            hovertemplate="<b>Legacy Centroid</b><extra></extra>",
-        ))
-        fig.add_trace(go.Scatter(
-            x=[1], y=[0],
-            mode="markers",
-            marker=dict(size=20, color=COLORS["strategy"], symbol="diamond", line=dict(color="white", width=2)),
-            name="Strategy Centroid",
-            hovertemplate="<b>Strategy Centroid</b><extra></extra>",
-        ))
-        
-        # Entity
-        entity_color = COLORS["positive"] if drift_score >= 0 else COLORS["negative"]
-        fig.add_trace(go.Scatter(
-            x=[norm_entity], y=[0],
+            x=norm_points_a,
+            y=jitter_a,
             mode="markers+text",
-            marker=dict(size=25, color=COLORS["entity"], symbol="star", line=dict(color="white", width=2)),
-            text=[entity_name],
-            textposition="top center",
-            textfont=dict(size=11, color=COLORS["entity"]),
-            name=entity_name,
-            hovertemplate=f"<b>{entity_name}</b><br>Score: {drift_score:+.4f}<extra></extra>",
+            marker=dict(
+                size=8,
+                color=COLORS["legacy"],
+                opacity=0.7,
+                symbol="circle",
+            ),
+            text=anchor_a,
+            textposition="bottom center",
+            textfont=dict(size=9, color=COLORS["legacy"], family="Arial"),
+            cliponaxis=False,
+            name="Legacy Anchors",
+            hovertemplate="<b>%{text}</b><br>Position: %{x:.2f}<extra></extra>",
         ))
+        
+        # Plot Strategy anchors (small dots above axis)
+        jitter_b = np.random.uniform(0.05, 0.15, len(anchor_b))
+        fig.add_trace(go.Scatter(
+            x=norm_points_b,
+            y=jitter_b,
+            mode="markers+text",
+            marker=dict(
+                size=8,
+                color=COLORS["strategy"],
+                opacity=0.7,
+                symbol="circle",
+            ),
+            text=anchor_b,
+            textposition="top center",
+            textfont=dict(size=9, color=COLORS["strategy"], family="Arial"),
+            cliponaxis=False,
+            name="Strategy Anchors",
+            hovertemplate="<b>%{text}</b><br>Position: %{x:.2f}<extra></extra>",
+        ))
+        
+        # Plot Legacy centroid (large marker at -1)
+        fig.add_trace(go.Scatter(
+            x=[-1],
+            y=[0],
+            mode="markers",
+            marker=dict(
+                size=30,
+                color=COLORS["centroid_legacy"],
+                symbol="diamond",
+                line=dict(color="white", width=3),
+            ),
+            name="LEGACY",
+            hovertemplate="<b>Legacy Centroid</b><br>Position: -1.00<extra></extra>",
+        ))
+        
+        # Plot Strategy centroid (large marker at +1)
+        fig.add_trace(go.Scatter(
+            x=[1],
+            y=[0],
+            mode="markers",
+            marker=dict(
+                size=30,
+                color=COLORS["centroid_strategy"],
+                symbol="diamond",
+                line=dict(color="white", width=3),
+            ),
+            name="STRATEGY",
+            hovertemplate="<b>Strategy Centroid</b><br>Position: +1.00<extra></extra>",
+        ))
+        
+        # Plot Entity (large marker)
+        fig.add_trace(go.Scatter(
+            x=[norm_entity],
+            y=[0],
+            mode="markers+text",
+            marker=dict(
+                size=40,
+                color=COLORS["entity"],
+                symbol="star",
+                line=dict(color="white", width=3),
+            ),
+            text=[entity_name.upper()],
+            textposition="top center",
+            textfont=dict(size=14, color=COLORS["entity"], family="Arial Black"),
+            name=f"Entity: {entity_name}",
+            hovertemplate=(
+                f"<b>{entity_name}</b><br>"
+                f"Position: %{{x:.3f}}<br>"
+                f"Dist to Legacy: {dist_to_legacy:.4f}<br>"
+                f"Dist to Strategy: {dist_to_strategy:.4f}<br>"
+                f"Drift Score: {calculated_drift:+.4f}"
+                "<extra></extra>"
+            ),
+        ))
+        
+        # Add vertical lines at key positions
+        fig.add_vline(x=-1, line_width=2, line_color=COLORS["centroid_legacy"], line_dash="dash")
+        fig.add_vline(x=1, line_width=2, line_color=COLORS["centroid_strategy"], line_dash="dash")
+        fig.add_vline(x=0, line_width=2, line_color="gray", line_dash="dot")  # Neutral line
         
         dim_display = dimension_name.replace("_", " ").title()
         variance = pca.explained_variance_ratio_[0] * 100
         
         fig.update_layout(
             title=dict(
-                text=f"<b>{dim_display}</b> <span style='font-size:12px'>({variance:.0f}% var.)</span>",
+                text=(
+                    f"<b>Semantic Axis: {dim_display}</b><br>"
+                    f"<sub>{entity_name} | PCA 1D ({variance:.1f}% variance explained)</sub>"
+                ),
                 x=0.5,
-                font=dict(size=14),
+                font=dict(size=20, family="Arial"),
             ),
             xaxis=dict(
+                title="",
                 range=[-1.5, 1.5],
-                tickvals=[-1, 0, 1],
-                ticktext=["LEGACY", "0", "STRATEGY"],
-                tickfont=dict(size=10),
-                showgrid=False,
+                tickvals=[-1, -0.5, 0, 0.5, 1],
+                ticktext=["LEGACY<br>(-1)", "-0.5", "NEUTRAL<br>(0)", "+0.5", "STRATEGY<br>(+1)"],
+                tickfont=dict(size=11),
+                gridcolor="#E0E0E0",
                 zeroline=False,
             ),
             yaxis=dict(
-                range=[-0.25, 0.25],
+                title="",
+                range=[-0.35, 0.35],
                 showticklabels=False,
                 showgrid=False,
                 zeroline=False,
             ),
             plot_bgcolor="#FAFAFA",
             paper_bgcolor="white",
-            showlegend=False,
-            height=200,
-            margin=dict(l=30, r=30, t=50, b=30),
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=-0.25,
+                xanchor="center",
+                x=0.5,
+            ),
+            font=dict(family="Arial"),
+            height=500,
+            width=1100,
+            margin=dict(t=100, b=120, l=50, r=50),
+            annotations=[
+                # Distance labels
+                dict(
+                    x=norm_entity / 2,
+                    y=-0.25,
+                    text=f"← Dist: {dist_to_legacy:.3f}",
+                    showarrow=False,
+                    font=dict(size=11, color=COLORS["legacy"]),
+                ),
+                dict(
+                    x=(norm_entity + 1) / 2,
+                    y=-0.25,
+                    text=f"Dist: {dist_to_strategy:.3f} →",
+                    showarrow=False,
+                    font=dict(size=11, color=COLORS["strategy"]),
+                ),
+                # Drift score
+                dict(
+                    x=norm_entity,
+                    y=0.28,
+                    text=f"<b>Drift Score: {calculated_drift:+.4f}</b>",
+                    showarrow=False,
+                    font=dict(size=14, color=COLORS["entity"]),
+                ),
+                # Centroid distance
+                dict(
+                    x=0.5,
+                    y=-0.32,
+                    text=f"Centroid Separation: {centroid_dist:.4f}",
+                    showarrow=False,
+                    font=dict(size=10, color="gray"),
+                ),
+            ],
         )
         
         div_id = f"axis_{dimension_name}"
         plot_html = fig.to_html(include_plotlyjs=False, full_html=False, div_id=div_id)
         
-        # Generate anchor lists HTML
+        # Legacy anchor lists format (kept for redundancy/accessibility below chart)
         def format_anchors(anchors):
             return "<ul style='list-style-type: none; padding: 0; column-count: 2; column-gap: 20px;'>" + \
                    "".join(f"<li style='padding: 2px 0; font-size: 12px; color: #444;'>• {term}</li>" for term in anchors) + \
@@ -400,7 +524,7 @@ class AuditReportVisualizer(BaseProbe):
 <head>
     <meta charset="UTF-8">
     <title>Semantic Twin Report: {entity_name}</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.29.0.min.js" charset="utf-8"></script>
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }}
