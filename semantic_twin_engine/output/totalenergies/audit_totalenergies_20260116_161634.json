@@ -1,0 +1,80 @@
+{
+  "entity": "TotalEnergies",
+  "timestamp": "2026-01-16T16:16:34.906790+00:00",
+  "probes": {
+    "vector_probe": {
+      "probe_name": "vector_probe",
+      "success": true,
+      "data": {
+        "entity_name": "TotalEnergies",
+        "dimensions": {
+          "product_physics": {
+            "dimension_name": "product_physics",
+            "drift_score": 1.0689,
+            "distance_to_legacy": 0.7952,
+            "distance_to_strategy": 0.6797,
+            "centroid_separation": 0.2368,
+            "interpretation": "Strongly Strategy"
+          },
+          "talent_culture": {
+            "dimension_name": "talent_culture",
+            "drift_score": 0.1788,
+            "distance_to_legacy": 0.6661,
+            "distance_to_strategy": 0.6458,
+            "centroid_separation": 0.2653,
+            "interpretation": "Leaning Strategy"
+          },
+          "societal_impact": {
+            "dimension_name": "societal_impact",
+            "drift_score": 0.3415,
+            "distance_to_legacy": 0.5947,
+            "distance_to_strategy": 0.5468,
+            "centroid_separation": 0.2339,
+            "interpretation": "Leaning Strategy"
+          },
+          "financial_dynamics": {
+            "dimension_name": "financial_dynamics",
+            "drift_score": -0.2417,
+            "distance_to_legacy": 0.5462,
+            "distance_to_strategy": 0.5699,
+            "centroid_separation": 0.1912,
+            "interpretation": "Leaning Legacy"
+          },
+          "evidence_integrity": {
+            "dimension_name": "evidence_integrity",
+            "drift_score": -0.0624,
+            "distance_to_legacy": 0.6292,
+            "distance_to_strategy": 0.6374,
+            "centroid_separation": 0.3385,
+            "interpretation": "Neutral"
+          }
+        },
+        "summary": "Entity 'TotalEnergies' analyzed on 5 dimension(s). Average drift score: 0.2570"
+      },
+      "errors": [],
+      "metadata": {
+        "dimensions_analyzed": 5,
+        "entity": "TotalEnergies"
+      }
+    },
+    "cluster_validator": {
+      "probe_name": "cluster_validator",
+      "success": true,
+      "data": {
+        "overall_status": "VALID",
+        "dimensions": []
+      },
+      "errors": [],
+      "metadata": {
+        "dimensions_validated": 0
+      }
+    }
+  },
+  "metadata": {
+    "start_time": "2026-01-16T16:16:34.906790+00:00",
+    "end_time": "2026-01-16T16:16:38.625329+00:00",
+    "probes_executed": 2,
+    "probes_succeeded": 2,
+    "probes_failed": 0
+  }
+}

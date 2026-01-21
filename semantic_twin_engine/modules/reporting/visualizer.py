@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 import plotly.graph_objects as go
+import plotly.offline
 from plotly.subplots import make_subplots
 from sklearn.decomposition import PCA
 import yaml
@@ -489,6 +490,9 @@ class AuditReportVisualizer(BaseProbe):
         Returns:
             Complete HTML string.
         """
+        # Get Plotly JS for offline use
+        plotly_js = plotly.offline.get_plotlyjs()
+
         # Build tab buttons
         tab_buttons = []
         tab_buttons.append('<button class="tab-btn active" onclick="showTab(\'summary\')">Summary</button>')
@@ -524,7 +528,7 @@ class AuditReportVisualizer(BaseProbe):
 <head>
     <meta charset="UTF-8">
     <title>Semantic Twin Report: {entity_name}</title>
-    <script src="https://cdn.plot.ly/plotly-2.29.0.min.js" charset="utf-8"></script>
+    <script type="text/javascript">{plotly_js}</script>
     <style>
         * {{ box-sizing: border-box; margin: 0; padding: 0; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }}
