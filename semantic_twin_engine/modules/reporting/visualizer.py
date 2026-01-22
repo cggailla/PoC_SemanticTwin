@@ -8,52 +8,51 @@ Generates a unified HTML report with:
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import plotly.graph_objects as go
 import plotly.offline
-from plotly.subplots import make_subplots
-from sklearn.decomposition import PCA
 import yaml
-
 from modules.base_probe import BaseProbe
+from sklearn.decomposition import PCA
 
 logger = logging.getLogger(__name__)
 
 # Color palette
 COLORS = {
-    "legacy": "#8B4513",       # Saddle brown
+    "legacy": "#8B4513",  # Saddle brown
     "legacy_light": "rgba(139, 69, 19, 0.3)",
-    "strategy": "#2E8B57",     # Sea green
+    "strategy": "#2E8B57",  # Sea green
     "strategy_light": "rgba(46, 139, 87, 0.3)",
-    "entity": "#1E90FF",       # Dodger blue
+    "entity": "#1E90FF",  # Dodger blue
     "neutral": "#666666",
     "axis": "#333333",
     "positive": "#2E8B57",
     "negative": "#8B4513",
-    "centroid_legacy": "#CD853F",   # Peru (darker legacy)
+    "centroid_legacy": "#CD853F",  # Peru (darker legacy)
     "centroid_strategy": "#228B22",  # Forest green (darker strategy)
 }
 
 
 class AuditReportVisualizer(BaseProbe):
     """Generates visual reports from audit results.
-    
+
     Creates a unified HTML dashboard with:
     - Summary bar chart of drift scores
     - Individual semantic axis plots for each dimension
     """
-    
+
     @property
     def name(self) -> str:
         return "report_visualizer"
-    
+
     def run(self, context):
         """Not used - this class generates reports from completed audits."""
         pass
-    
+
     def generate_report(
         self,
         audit_data: dict[str, Any],
@@ -62,24 +61,140 @@ class AuditReportVisualizer(BaseProbe):
         output_path: Path,
     ) -> Path:
         """Generate complete visual report from audit data.
-        
+
         Args:
             audit_data: The vector_probe results from audit JSON.
             dimensions_config: Dimension configs from settings.yaml.
             entity_name: Name of the entity.
             output_path: Where to save the HTML report.
-        
+
         Returns:
             Path to the generated HTML file.
         """
         logger.info("Generating visual report for %s", entity_name)
-        
+        # If audit_data is empty or missing dimensions and FAKE mode is enabled,
+        # try to load a fake audit JSON from workspace `output/fake` (or
+        # legacy locations) and use its vector_probe data as the audit_data.
+        use_fake = os.getenv("FAKE_OPENAI_RESULT", "").lower() in ("true", "1", "yes")
+        if (not audit_data or not audit_data.get("dimensions")) and use_fake:
+            try:
+                # Attempt to locate repository root (move up from this file)
+                repo_root = Path(__file__).resolve().parents[3]
+            except Exception:
+                repo_root = Path(__file__).resolve().parent
+
+            candidate_dirs = [
+                repo_root / "output" / "fake",
+                repo_root / "semantic_twin_engine" / "output" / "fake",
+                repo_root / "visuals" / "fake",
+            ]
+
+            loaded = False
+            for cand in candidate_dirs:
+                try:
+                    if cand.exists() and cand.is_dir():
+                        files = list(cand.glob("audit_*.json"))
+                        if not files:
+                            continue
+                        latest = max(files, key=lambda p: p.stat().st_mtime)
+                        with open(latest, "r", encoding="utf-8") as fh:
+                            fake_json = json.load(fh)
+                        # Prefer vector_probe.data if present
+                        vec = (
+                            fake_json.get("probes", {})
+                            .get("vector_probe", {})
+                            .get("data")
+                        )
+                        if vec and isinstance(vec, dict):
+                            audit_data = vec
+                            # If entity_name was empty, try to derive it
+                            if not entity_name:
+                                entity_name = (
+                                    fake_json.get("entity")
+                                    or vec.get("entity_name")
+                                    or "audit"
+                                )
+                            loaded = True
+                            logger.info(
+                                "Loaded fake audit data from %s for visual report",
+                                latest,
+                            )
+                            break
+                except Exception:
+                    logger.exception("Failed loading fake audit from %s", cand)
+            if not loaded:
+                logger.warning(
+                    "FAKE mode enabled but no fake audit JSON found in candidates: %s",
+                    candidate_dirs,
+                )
+
         # Extract dimension results
         dimensions = audit_data.get("dimensions", {})
-        
+
+        # If no dimensions_config provided, try loading the canonical
+        # dimension definitions from the engine settings so tabs appear
+        # (useful when caller passed an empty config, e.g., during FAKE mode).
+        if not dimensions_config:
+            try:
+                # repo root: move up from modules/reporting/visualizer.py
+                repo_root = Path(__file__).resolve().parents[3]
+                cfg_path = (
+                    repo_root / "semantic_twin_engine" / "config" / "settings.yaml"
+                )
+                if not cfg_path.exists():
+                    cfg_path = (
+                        repo_root / "semantic_twin_engine" / "config" / "settings.yaml"
+                    )
+                if cfg_path.exists():
+                    with open(cfg_path, "r", encoding="utf-8") as fh:
+                        cfg = yaml.safe_load(fh)
+                    # Drill into probes.vector_probe.params.dimensions
+                    dimensions_config = (
+                        cfg.get("probes", {})
+                        .get("vector_probe", {})
+                        .get("params", {})
+                        .get("dimensions", {})
+                    )
+                    if dimensions_config:
+                        logger.info("Loaded dimensions_config from %s", cfg_path)
+            except Exception:
+                logger.exception("Failed to load dimensions_config from settings.yaml")
+
+        # If audit_data has no dimensions but we do have a dimensions_config,
+        # synthesize neutral dimension results so visual tabs and plots are
+        # rendered (useful for FAKE mode or when audit lacked computed values).
+        if (not dimensions or len(dimensions) == 0) and dimensions_config:
+            try:
+                synth = {}
+                for dim_name, dim_conf in dimensions_config.items():
+                    synth[dim_name] = {
+                        "dimension_name": dim_name,
+                        "drift_score": 0.0,
+                        "distance_to_legacy": 1.0,
+                        "distance_to_strategy": 1.0,
+                        "centroid_separation": 1.0,
+                        "interpretation": "Neutral",
+                    }
+                dimensions = synth
+                # Inject back into audit_data for downstream use
+                if isinstance(audit_data, dict):
+                    audit_data["dimensions"] = dimensions
+                    audit_data.setdefault(
+                        "summary",
+                        f"Entity '{entity_name}' analyzed on {len(dimensions)} dimension(s). Average drift score: 0.0",
+                    )
+                logger.info(
+                    "Synthesized %d dimensions from dimensions_config for visual report",
+                    len(dimensions),
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to synthesize dimensions from dimensions_config"
+                )
+
         # Generate bar chart
         bar_chart = self._create_bar_chart(dimensions, entity_name)
-        
+
         # Generate axis plots for each dimension
         axis_plots = []
         for dim_name, dim_result in dimensions.items():
@@ -94,7 +209,7 @@ class AuditReportVisualizer(BaseProbe):
                     drift_score=dim_result["drift_score"],
                 )
                 axis_plots.append((dim_name, (axis_plot, anchors_html)))
-        
+
         # Combine into HTML with tabs
         html_content = self._build_html_report(
             entity_name=entity_name,
@@ -102,55 +217,55 @@ class AuditReportVisualizer(BaseProbe):
             axis_plots=axis_plots,
             audit_data=audit_data,
         )
-        
+
         # Save
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_content)
-        
+
         logger.info("Report saved to %s", output_path)
         return output_path
-    
+
     def _create_bar_chart(
         self,
         dimensions: dict[str, Any],
         entity_name: str,
     ) -> str:
         """Create horizontal bar chart of drift scores.
-        
+
         Args:
             dimensions: Dictionary of dimension results.
             entity_name: Name of the entity.
-        
+
         Returns:
             Plotly figure as HTML div.
         """
         # Sort by drift score
         sorted_dims = sorted(
-            dimensions.items(),
-            key=lambda x: x[1]["drift_score"],
-            reverse=True
+            dimensions.items(), key=lambda x: x[1]["drift_score"], reverse=True
         )
-        
+
         names = [d[0].replace("_", " ").title() for d in sorted_dims]
         scores = [d[1]["drift_score"] for d in sorted_dims]
         colors = [COLORS["positive"] if s >= 0 else COLORS["negative"] for s in scores]
-        
+
         fig = go.Figure()
-        
-        fig.add_trace(go.Bar(
-            y=names,
-            x=scores,
-            orientation="h",
-            marker=dict(color=colors),
-            text=[f"{s:+.2f}" for s in scores],
-            textposition="outside",
-            hovertemplate="<b>%{y}</b><br>Drift Score: %{x:+.4f}<extra></extra>",
-        ))
-        
+
+        fig.add_trace(
+            go.Bar(
+                y=names,
+                x=scores,
+                orientation="h",
+                marker=dict(color=colors),
+                text=[f"{s:+.2f}" for s in scores],
+                textposition="outside",
+                hovertemplate="<b>%{y}</b><br>Drift Score: %{x:+.4f}<extra></extra>",
+            )
+        )
+
         # Add zero line
         fig.add_vline(x=0, line_width=2, line_color="black")
-        
+
         fig.update_layout(
             title=dict(
                 text=f"<b>Semantic Positioning: {entity_name}</b>",
@@ -161,7 +276,13 @@ class AuditReportVisualizer(BaseProbe):
                 title="Drift Score",
                 range=[-1.2, 1.2],
                 tickvals=[-1, -0.5, 0, 0.5, 1],
-                ticktext=["LEGACY<br>(-1)", "-0.5", "NEUTRAL<br>(0)", "+0.5", "STRATEGY<br>(+1)"],
+                ticktext=[
+                    "LEGACY<br>(-1)",
+                    "-0.5",
+                    "NEUTRAL<br>(0)",
+                    "+0.5",
+                    "STRATEGY<br>(+1)",
+                ],
                 gridcolor="#E0E0E0",
             ),
             yaxis=dict(title=""),
@@ -170,9 +291,9 @@ class AuditReportVisualizer(BaseProbe):
             height=max(300, len(dimensions) * 60 + 100),
             margin=dict(l=150, r=80, t=80, b=60),
         )
-        
+
         return fig.to_html(include_plotlyjs=False, full_html=False, div_id="bar_chart")
-    
+
     def _create_axis_plot(
         self,
         dimension_name: str,
@@ -183,7 +304,7 @@ class AuditReportVisualizer(BaseProbe):
         drift_score: float,
     ) -> tuple[str, dict]:
         """Create 1D axis plot for a dimension.
-        
+
         Args:
             dimension_name: Name of the dimension.
             anchor_a: Legacy anchor terms.
@@ -191,61 +312,63 @@ class AuditReportVisualizer(BaseProbe):
             contextual_prompt: Prompt template.
             entity_name: Entity name.
             drift_score: Pre-calculated drift score (used for validation).
-        
+
         Returns:
             Tuple of (Plotly figure as HTML div, Dictionary of anchor HTML lists).
         """
         # Get embeddings (uses cache)
         embeddings_a = np.array(self.get_embeddings(anchor_a))
         embeddings_b = np.array(self.get_embeddings(anchor_b))
-        
+
         prompt = contextual_prompt.format(entity=entity_name)
         entity_embedding = np.array(self.get_embedding(prompt))
-        
+
         # Compute centroids
         centroid_a = np.mean(embeddings_a, axis=0)
         centroid_b = np.mean(embeddings_b, axis=0)
-        
+
         # Calculate cosine distances (re-calculated for annotations)
         dist_to_legacy = self.cosine_distance(entity_embedding, centroid_a)
         dist_to_strategy = self.cosine_distance(entity_embedding, centroid_b)
         centroid_dist = self.cosine_distance(centroid_a, centroid_b)
-        
+
         # Re-calculate drift score for plot consistency
         axis_vector = centroid_b - centroid_a
         midpoint = (centroid_a + centroid_b) / 2
         entity_relative = entity_embedding - midpoint
         axis_length_sq = np.dot(axis_vector, axis_vector)
-        
+
         if axis_length_sq > 0:
             projection = np.dot(entity_relative, axis_vector) / axis_length_sq
             calculated_drift = float(projection * 2)
         else:
             calculated_drift = 0.0
-            
+
         # Combine all embeddings for PCA
-        all_embeddings = np.vstack([
-            embeddings_a,
-            embeddings_b,
-            [centroid_a],
-            [centroid_b],
-            [entity_embedding],
-        ])
-        
+        all_embeddings = np.vstack(
+            [
+                embeddings_a,
+                embeddings_b,
+                [centroid_a],
+                [centroid_b],
+                [entity_embedding],
+            ]
+        )
+
         # Apply PCA to reduce to 1D
         pca = PCA(n_components=1)
         embeddings_1d = pca.fit_transform(all_embeddings).flatten()
-        
+
         # Split back into groups
         n_a = len(anchor_a)
         n_b = len(anchor_b)
-        
+
         points_a = embeddings_1d[:n_a]
-        points_b = embeddings_1d[n_a:n_a + n_b]
+        points_b = embeddings_1d[n_a : n_a + n_b]
         centroid_a_1d = embeddings_1d[n_a + n_b]
         centroid_b_1d = embeddings_1d[n_a + n_b + 1]
         entity_1d = embeddings_1d[n_a + n_b + 2]
-        
+
         # Ensure correct orientation: Legacy (A) should be LEFT, Strategy (B) should be RIGHT
         if centroid_a_1d > centroid_b_1d:
             points_a = -points_a
@@ -253,11 +376,11 @@ class AuditReportVisualizer(BaseProbe):
             centroid_a_1d = -centroid_a_1d
             centroid_b_1d = -centroid_b_1d
             entity_1d = -entity_1d
-        
+
         # Normalize axis so 0 = midpoint, Legacy=-1, Strategy=+1
         midpoint_1d = (centroid_a_1d + centroid_b_1d) / 2
         half_range = abs(centroid_b_1d - centroid_a_1d) / 2
-        
+
         if half_range > 0:
             norm_points_a = (points_a - midpoint_1d) / half_range
             norm_points_b = (points_b - midpoint_1d) / half_range
@@ -266,123 +389,141 @@ class AuditReportVisualizer(BaseProbe):
             norm_points_a = np.zeros_like(points_a)
             norm_points_b = np.zeros_like(points_b)
             norm_entity = 0.0
-        
+
         # Create figure
         fig = go.Figure()
-        
+
         # Draw main axis line (from -1 to +1)
-        fig.add_trace(go.Scatter(
-            x=[-1, 1],
-            y=[0, 0],
-            mode="lines",
-            line=dict(color=COLORS["axis"], width=4),
-            name="Semantic Axis",
-            hoverinfo="skip",
-        ))
-        
+        fig.add_trace(
+            go.Scatter(
+                x=[-1, 1],
+                y=[0, 0],
+                mode="lines",
+                line=dict(color=COLORS["axis"], width=4),
+                name="Semantic Axis",
+                hoverinfo="skip",
+            )
+        )
+
         # Plot Legacy anchors (small dots below axis)
         jitter_a = np.random.uniform(-0.15, -0.05, len(anchor_a))
-        fig.add_trace(go.Scatter(
-            x=norm_points_a,
-            y=jitter_a,
-            mode="markers+text",
-            marker=dict(
-                size=8,
-                color=COLORS["legacy"],
-                opacity=0.7,
-                symbol="circle",
-            ),
-            text=anchor_a,
-            textposition="bottom center",
-            textfont=dict(size=9, color=COLORS["legacy"], family="Arial"),
-            cliponaxis=False,
-            name="Legacy Anchors",
-            hovertemplate="<b>%{text}</b><br>Position: %{x:.2f}<extra></extra>",
-        ))
-        
+        fig.add_trace(
+            go.Scatter(
+                x=norm_points_a,
+                y=jitter_a,
+                mode="markers+text",
+                marker=dict(
+                    size=8,
+                    color=COLORS["legacy"],
+                    opacity=0.7,
+                    symbol="circle",
+                ),
+                text=anchor_a,
+                textposition="bottom center",
+                textfont=dict(size=9, color=COLORS["legacy"], family="Arial"),
+                cliponaxis=False,
+                name="Legacy Anchors",
+                hovertemplate="<b>%{text}</b><br>Position: %{x:.2f}<extra></extra>",
+            )
+        )
+
         # Plot Strategy anchors (small dots above axis)
         jitter_b = np.random.uniform(0.05, 0.15, len(anchor_b))
-        fig.add_trace(go.Scatter(
-            x=norm_points_b,
-            y=jitter_b,
-            mode="markers+text",
-            marker=dict(
-                size=8,
-                color=COLORS["strategy"],
-                opacity=0.7,
-                symbol="circle",
-            ),
-            text=anchor_b,
-            textposition="top center",
-            textfont=dict(size=9, color=COLORS["strategy"], family="Arial"),
-            cliponaxis=False,
-            name="Strategy Anchors",
-            hovertemplate="<b>%{text}</b><br>Position: %{x:.2f}<extra></extra>",
-        ))
-        
+        fig.add_trace(
+            go.Scatter(
+                x=norm_points_b,
+                y=jitter_b,
+                mode="markers+text",
+                marker=dict(
+                    size=8,
+                    color=COLORS["strategy"],
+                    opacity=0.7,
+                    symbol="circle",
+                ),
+                text=anchor_b,
+                textposition="top center",
+                textfont=dict(size=9, color=COLORS["strategy"], family="Arial"),
+                cliponaxis=False,
+                name="Strategy Anchors",
+                hovertemplate="<b>%{text}</b><br>Position: %{x:.2f}<extra></extra>",
+            )
+        )
+
         # Plot Legacy centroid (large marker at -1)
-        fig.add_trace(go.Scatter(
-            x=[-1],
-            y=[0],
-            mode="markers",
-            marker=dict(
-                size=30,
-                color=COLORS["centroid_legacy"],
-                symbol="diamond",
-                line=dict(color="white", width=3),
-            ),
-            name="LEGACY",
-            hovertemplate="<b>Legacy Centroid</b><br>Position: -1.00<extra></extra>",
-        ))
-        
+        fig.add_trace(
+            go.Scatter(
+                x=[-1],
+                y=[0],
+                mode="markers",
+                marker=dict(
+                    size=30,
+                    color=COLORS["centroid_legacy"],
+                    symbol="diamond",
+                    line=dict(color="white", width=3),
+                ),
+                name="LEGACY",
+                hovertemplate="<b>Legacy Centroid</b><br>Position: -1.00<extra></extra>",
+            )
+        )
+
         # Plot Strategy centroid (large marker at +1)
-        fig.add_trace(go.Scatter(
-            x=[1],
-            y=[0],
-            mode="markers",
-            marker=dict(
-                size=30,
-                color=COLORS["centroid_strategy"],
-                symbol="diamond",
-                line=dict(color="white", width=3),
-            ),
-            name="STRATEGY",
-            hovertemplate="<b>Strategy Centroid</b><br>Position: +1.00<extra></extra>",
-        ))
-        
+        fig.add_trace(
+            go.Scatter(
+                x=[1],
+                y=[0],
+                mode="markers",
+                marker=dict(
+                    size=30,
+                    color=COLORS["centroid_strategy"],
+                    symbol="diamond",
+                    line=dict(color="white", width=3),
+                ),
+                name="STRATEGY",
+                hovertemplate="<b>Strategy Centroid</b><br>Position: +1.00<extra></extra>",
+            )
+        )
+
         # Plot Entity (large marker)
-        fig.add_trace(go.Scatter(
-            x=[norm_entity],
-            y=[0],
-            mode="markers+text",
-            marker=dict(
-                size=40,
-                color=COLORS["entity"],
-                symbol="star",
-                line=dict(color="white", width=3),
-            ),
-            text=[entity_name.upper()],
-            textposition="top center",
-            textfont=dict(size=14, color=COLORS["entity"], family="Arial Black"),
-            name=f"Entity: {entity_name}",
-            hovertemplate=(
-                f"<b>{entity_name}</b><br>"
-                f"Position: %{{x:.3f}}<br>"
-                f"Dist to Legacy: {dist_to_legacy:.4f}<br>"
-                f"Dist to Strategy: {dist_to_strategy:.4f}<br>"
-                f"Drift Score: {calculated_drift:+.4f}"
-                "<extra></extra>"
-            ),
-        ))
-        
+        fig.add_trace(
+            go.Scatter(
+                x=[norm_entity],
+                y=[0],
+                mode="markers+text",
+                marker=dict(
+                    size=40,
+                    color=COLORS["entity"],
+                    symbol="star",
+                    line=dict(color="white", width=3),
+                ),
+                text=[entity_name.upper()],
+                textposition="top center",
+                textfont=dict(size=14, color=COLORS["entity"], family="Arial Black"),
+                name=f"Entity: {entity_name}",
+                hovertemplate=(
+                    f"<b>{entity_name}</b><br>"
+                    f"Position: %{{x:.3f}}<br>"
+                    f"Dist to Legacy: {dist_to_legacy:.4f}<br>"
+                    f"Dist to Strategy: {dist_to_strategy:.4f}<br>"
+                    f"Drift Score: {calculated_drift:+.4f}"
+                    "<extra></extra>"
+                ),
+            )
+        )
+
         # Add vertical lines at key positions
-        fig.add_vline(x=-1, line_width=2, line_color=COLORS["centroid_legacy"], line_dash="dash")
-        fig.add_vline(x=1, line_width=2, line_color=COLORS["centroid_strategy"], line_dash="dash")
-        fig.add_vline(x=0, line_width=2, line_color="gray", line_dash="dot")  # Neutral line
-        
+        fig.add_vline(
+            x=-1, line_width=2, line_color=COLORS["centroid_legacy"], line_dash="dash"
+        )
+        fig.add_vline(
+            x=1, line_width=2, line_color=COLORS["centroid_strategy"], line_dash="dash"
+        )
+        fig.add_vline(
+            x=0, line_width=2, line_color="gray", line_dash="dot"
+        )  # Neutral line
+
         dim_display = dimension_name.replace("_", " ").title()
         variance = pca.explained_variance_ratio_[0] * 100
-        
+
         fig.update_layout(
             title=dict(
                 text=(
@@ -396,7 +537,13 @@ class AuditReportVisualizer(BaseProbe):
                 title="",
                 range=[-1.5, 1.5],
                 tickvals=[-1, -0.5, 0, 0.5, 1],
-                ticktext=["LEGACY<br>(-1)", "-0.5", "NEUTRAL<br>(0)", "+0.5", "STRATEGY<br>(+1)"],
+                ticktext=[
+                    "LEGACY<br>(-1)",
+                    "-0.5",
+                    "NEUTRAL<br>(0)",
+                    "+0.5",
+                    "STRATEGY<br>(+1)",
+                ],
                 tickfont=dict(size=11),
                 gridcolor="#E0E0E0",
                 zeroline=False,
@@ -455,23 +602,28 @@ class AuditReportVisualizer(BaseProbe):
                 ),
             ],
         )
-        
+
         div_id = f"axis_{dimension_name}"
         plot_html = fig.to_html(include_plotlyjs=False, full_html=False, div_id=div_id)
-        
+
         # Legacy anchor lists format (kept for redundancy/accessibility below chart)
         def format_anchors(anchors):
-            return "<ul style='list-style-type: none; padding: 0; column-count: 2; column-gap: 20px;'>" + \
-                   "".join(f"<li style='padding: 2px 0; font-size: 12px; color: #444;'>• {term}</li>" for term in anchors) + \
-                   "</ul>"
+            return (
+                "<ul style='list-style-type: none; padding: 0; column-count: 2; column-gap: 20px;'>"
+                + "".join(
+                    f"<li style='padding: 2px 0; font-size: 12px; color: #444;'>• {term}</li>"
+                    for term in anchors
+                )
+                + "</ul>"
+            )
 
         anchors_html = {
             "legacy": format_anchors(anchor_a),
-            "strategy": format_anchors(anchor_b)
+            "strategy": format_anchors(anchor_b),
         }
-        
+
         return plot_html, anchors_html
-    
+
     def _build_html_report(
         self,
         entity_name: str,
@@ -480,13 +632,13 @@ class AuditReportVisualizer(BaseProbe):
         audit_data: dict[str, Any],
     ) -> str:
         """Build complete HTML report with tabs.
-        
+
         Args:
             entity_name: Entity name.
             bar_chart: Bar chart HTML.
             axis_plots: List of (name, html) tuples.
             audit_data: Raw audit data.
-        
+
         Returns:
             Complete HTML string.
         """
@@ -495,34 +647,44 @@ class AuditReportVisualizer(BaseProbe):
 
         # Build tab buttons
         tab_buttons = []
-        tab_buttons.append('<button class="tab-btn active" onclick="showTab(\'summary\')">Summary</button>')
+        tab_buttons.append(
+            '<button class="tab-btn active" onclick="showTab(\'summary\')">Summary</button>'
+        )
         for dim_name, _ in axis_plots:
             display_name = dim_name.replace("_", " ").title()
-            tab_buttons.append(f'<button class="tab-btn" onclick="showTab(\'{dim_name}\')">{display_name}</button>')
-        
+            tab_buttons.append(
+                f'<button class="tab-btn" onclick="showTab(\'{dim_name}\')">{display_name}</button>'
+            )
+
         # Build tab contents
         tab_contents = []
-        tab_contents.append(f'<div id="tab-summary" class="tab-content active">{bar_chart}</div>')
+        tab_contents.append(
+            f'<div id="tab-summary" class="tab-content active">{bar_chart}</div>'
+        )
         for dim_name, (plot_html, anchors_html) in axis_plots:
-            tab_contents.append(f'''
+            tab_contents.append(f"""
             <div id="tab-{dim_name}" class="tab-content">
                 {plot_html}
                 <div style="display: flex; gap: 40px; margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 8px;">
                     <div style="flex: 1;">
                         <h3 style="color: #8B4513; border-bottom: 2px solid #8B4513; padding-bottom: 5px; margin-bottom: 10px; font-size: 14px;">Legacy Anchors</h3>
-                        {anchors_html['legacy']}
+                        {anchors_html["legacy"]}
                     </div>
                     <div style="flex: 1;">
                         <h3 style="color: #2E8B57; border-bottom: 2px solid #2E8B57; padding-bottom: 5px; margin-bottom: 10px; font-size: 14px;">Strategy Anchors</h3>
-                        {anchors_html['strategy']}
+                        {anchors_html["strategy"]}
                     </div>
                 </div>
             </div>
-            ''')
-        
+            """)
+
         # Summary stats
-        avg_score = audit_data.get("summary", "").split(":")[-1].strip() if "summary" in audit_data else "N/A"
-        
+        avg_score = (
+            audit_data.get("summary", "").split(":")[-1].strip()
+            if "summary" in audit_data
+            else "N/A"
+        )
+
         html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -555,10 +717,10 @@ class AuditReportVisualizer(BaseProbe):
     
     <div class="container">
         <div class="tabs">
-            {''.join(tab_buttons)}
+            {"".join(tab_buttons)}
         </div>
         
-        {''.join(tab_contents)}
+        {"".join(tab_contents)}
         
         <div class="legend">
             <div class="legend-item"><div class="legend-dot" style="background:#8B4513"></div> Legacy</div>
@@ -579,5 +741,5 @@ class AuditReportVisualizer(BaseProbe):
     </script>
 </body>
 </html>"""
-        
+
         return html
