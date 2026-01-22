@@ -83,3 +83,5 @@ logs/
 
 # Agent Artifacts (if local only)
 .gemini/
+
+fake/
