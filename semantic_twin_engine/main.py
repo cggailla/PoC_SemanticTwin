@@ -18,17 +18,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from core.config_loader import load_settings
 from core.orchestrator import Orchestrator, probe_registry
+from modules.cluster_validator import ClusterValidator
+from modules.logit_probe import LogitProbe
+from modules.reporting import AuditReportVisualizer
 
 # Register available probes
 from modules.vector_probe import VectorProbe
-from modules.logit_probe import LogitProbe
-from modules.cluster_validator import ClusterValidator
-from modules.reporting import AuditReportVisualizer
 
 
 def setup_logging(level: str = "INFO") -> None:
     """Configure logging for the application.
-    
+
     Args:
         level: Logging level (DEBUG, INFO, WARNING, ERROR).
     """
@@ -41,17 +41,14 @@ def setup_logging(level: str = "INFO") -> None:
 
 def register_probes() -> None:
     """Register all available probe modules with the registry.
-    
+
     Add new probes here as they are implemented.
     """
     probe_registry.register("vector_probe", VectorProbe)
     probe_registry.register("logit_probe", LogitProbe)
     probe_registry.register("cluster_validator", ClusterValidator)
-    
-    logging.info(
-        "Registered probes: %s", 
-        ", ".join(probe_registry.list_probes())
-    )
+
+    logging.info("Registered probes: %s", ", ".join(probe_registry.list_probes()))
 
 
 def generate_visualizations(
@@ -60,12 +57,12 @@ def generate_visualizations(
     logger: logging.Logger,
 ) -> Path | None:
     """Generate visual dashboard from audit report.
-    
+
     Args:
         report_path: Path to the audit JSON file.
         settings: Application settings.
         logger: Logger instance.
-    
+
     Returns:
         Path to generated HTML dashboard, or None on failure.
     """
@@ -73,35 +70,46 @@ def generate_visualizations(
         # Load audit report
         with open(report_path, "r", encoding="utf-8") as f:
             report_data = json.load(f)
-        
+
         # Check if vector_probe ran successfully
         vector_probe_data = report_data.get("probes", {}).get("vector_probe", {})
         if not vector_probe_data.get("success"):
             logger.warning("Vector probe did not succeed, skipping visualizations")
             return None
-        
+
         # Load dimension configs
-        dimensions_config = settings.probes.get("vector_probe", {}).params.get("dimensions", {})
-        
+        dimensions_config = settings.probes.get("vector_probe", {}).params.get(
+            "dimensions", {}
+        )
+
         # Generate report
         visualizer = AuditReportVisualizer()
-        
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         entity_slug = settings.entity.name.lower().replace(" ", "_")
-        output_path = Path("output/visuals") / f"{entity_slug}_{timestamp}_report.html"
-        
+
+        # If using fake embeddings, save to fake/ subdirectory
+        import os
+
+        use_fake = os.getenv("FAKE_OPENAI_RESULT", "").lower() in ("true", "1", "yes")
+        base_visuals_dir = Path("output/visuals")
+        visuals_dir = base_visuals_dir / "fake" if use_fake else base_visuals_dir
+        visuals_dir.mkdir(parents=True, exist_ok=True)
+
+        output_path = visuals_dir / f"{entity_slug}_{timestamp}_report.html"
+
         result_path = visualizer.generate_report(
             audit_data=vector_probe_data.get("data", {}),
             dimensions_config=dimensions_config,
             entity_name=settings.entity.name,
             output_path=output_path,
         )
-        
+
         # Save embedding cache
         visualizer.save_cache()
-        
+
         return result_path
-        
+
     except Exception as e:
         logger.error("Failed to generate visualizations: %s", e)
         return None
@@ -109,28 +117,28 @@ def generate_visualizations(
 
 def main() -> int:
     """Main entry point for the Semantic Twin Engine.
-    
+
     Returns:
         Exit code (0 for success, 1 for failure).
     """
     # Setup
     setup_logging()
     logger = logging.getLogger(__name__)
-    
+
     try:
         # Load configuration
         logger.info("Loading configuration...")
         settings = load_settings()
-        
+
         # Register probes
         register_probes()
-        
+
         # Create and run orchestrator
         logger.info("Initializing orchestrator...")
         orchestrator = Orchestrator(settings)
-        
+
         report, output_path = orchestrator.run_and_save()
-        
+
         logger.info("=" * 60)
         logger.info("AUDIT COMPLETE")
         logger.info("=" * 60)
@@ -139,7 +147,7 @@ def main() -> int:
         logger.info("Succeeded: %d", report.metadata["probes_succeeded"])
         logger.info("Failed: %d", report.metadata["probes_failed"])
         logger.info("Report saved to: %s", output_path)
-        
+
         # Generate visualizations
         logger.info("Generating visual report...")
         visual_path = generate_visualizations(
@@ -147,13 +155,13 @@ def main() -> int:
             settings=settings,
             logger=logger,
         )
-        
+
         if visual_path:
             logger.info("Visual report saved to: %s", visual_path)
             webbrowser.open(str(visual_path))
-        
+
         return 0
-        
+
     except Exception as e:
         logger.exception("Fatal error: %s", e)
         return 1
