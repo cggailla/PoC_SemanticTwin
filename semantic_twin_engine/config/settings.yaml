@@ -20,9 +20,18 @@ entity:
 # Reference anchors for comparison
 anchors:
   entities:
-    - "Altria"
-    - "British American Tobacco"
-    - "Japan Tobacco International"
+    legacy:
+      - "British American Tobacco"
+      - "Altria"
+      - "Japan Tobacco International"
+      - "Imperial Brands"
+      - "China National Tobacco Corporation"
+      - "KT&G"
+    strategic:
+      - "Sanofi"
+      - "Haleon"
+      - "IMiracle"
+      - "RELX Technology"
   concepts:
     - "smoking cessation"
     - "nicotine delivery"

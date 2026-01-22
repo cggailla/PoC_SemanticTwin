@@ -1,0 +1,80 @@
+{
+  "entity": "Philip Morris International",
+  "timestamp": "2026-01-22T15:49:36.661848+00:00",
+  "probes": {
+    "vector_probe": {
+      "probe_name": "vector_probe",
+      "success": true,
+      "data": {
+        "entity_name": "Philip Morris International",
+        "dimensions": {
+          "product_physics": {
+            "dimension_name": "product_physics",
+            "drift_score": -0.0725,
+            "distance_to_legacy": 0.6125,
+            "distance_to_strategy": 0.6348,
+            "centroid_separation": 0.2368,
+            "interpretation": "Neutral"
+          },
+          "talent_culture": {
+            "dimension_name": "talent_culture",
+            "drift_score": -0.1143,
+            "distance_to_legacy": 0.6282,
+            "distance_to_strategy": 0.6491,
+            "centroid_separation": 0.2653,
+            "interpretation": "Neutral"
+          },
+          "societal_impact": {
+            "dimension_name": "societal_impact",
+            "drift_score": -0.0433,
+            "distance_to_legacy": 0.5714,
+            "distance_to_strategy": 0.5741,
+            "centroid_separation": 0.2339,
+            "interpretation": "Neutral"
+          },
+          "financial_dynamics": {
+            "dimension_name": "financial_dynamics",
+            "drift_score": -0.3382,
+            "distance_to_legacy": 0.5122,
+            "distance_to_strategy": 0.5475,
+            "centroid_separation": 0.1912,
+            "interpretation": "Leaning Legacy"
+          },
+          "evidence_integrity": {
+            "dimension_name": "evidence_integrity",
+            "drift_score": 0.4525,
+            "distance_to_legacy": 0.6092,
+            "distance_to_strategy": 0.518,
+            "centroid_separation": 0.3385,
+            "interpretation": "Leaning Strategy"
+          }
+        },
+        "summary": "Entity 'Philip Morris International' analyzed on 5 dimension(s). Average drift score: -0.0232"
+      },
+      "errors": [],
+      "metadata": {
+        "dimensions_analyzed": 5,
+        "entity": "Philip Morris International"
+      }
+    },
+    "cluster_validator": {
+      "probe_name": "cluster_validator",
+      "success": true,
+      "data": {
+        "overall_status": "VALID",
+        "dimensions": []
+      },
+      "errors": [],
+      "metadata": {
+        "dimensions_validated": 0
+      }
+    }
+  },
+  "metadata": {
+    "start_time": "2026-01-22T15:49:36.661848+00:00",
+    "end_time": "2026-01-22T15:49:36.813896+00:00",
+    "probes_executed": 2,
+    "probes_succeeded": 2,
+    "probes_failed": 0
+  }
+}

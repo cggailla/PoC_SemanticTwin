@@ -55,9 +55,9 @@ class AnchorConfig(BaseModel):
         concepts: List of anchor concept keywords.
     """
     
-    entities: list[str] = Field(
-        default_factory=list,
-        description="Reference entity names for comparison"
+    entities: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Reference entity names for comparison (grouped)"
     )
     concepts: list[str] = Field(
         default_factory=list,

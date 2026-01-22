@@ -95,6 +95,7 @@ def generate_visualizations(
             dimensions_config=dimensions_config,
             entity_name=settings.entity.name,
             output_path=output_path,
+            comparators=settings.anchors.entities,
         )
         
         # Save embedding cache

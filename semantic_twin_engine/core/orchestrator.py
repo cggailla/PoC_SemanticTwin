@@ -119,12 +119,21 @@ class Orchestrator:
         """
         probe_config = self.settings.probes.get(probe_name)
         
+        # Handle grouped entities (dict) or flat list
+        anchor_entities = self.settings.anchors.entities
+        if isinstance(anchor_entities, dict):
+            # Flatten values from all groups
+            entities_list = []
+            for group in anchor_entities.values():
+                entities_list.extend(group)
+            anchor_entities = entities_list
+            
         return ProbeContext(
             entity_name=self.settings.entity.name,
             legacy_identity=self.settings.entity.legacy_identity,
             strategic_target=self.settings.entity.strategic_target,
             anchors=(
-                self.settings.anchors.entities + 
+                anchor_entities + 
                 self.settings.anchors.concepts
             ),
             probe_config=probe_config.params if probe_config else {},
