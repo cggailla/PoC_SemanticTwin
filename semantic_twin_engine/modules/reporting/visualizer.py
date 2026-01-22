@@ -34,6 +34,8 @@ COLORS = {
     "negative": "#8B4513",
     "centroid_legacy": "#CD853F",  # Peru (darker legacy)
     "centroid_strategy": "#228B22",  # Forest green (darker strategy)
+    "comparator_legacy": "#CD853F",   # Match Legacy Centroid (Peru)
+    "comparator_strategic": "#228B22", # Match Strategy Centroid (Forest Green)
 }
 
 
@@ -59,6 +61,7 @@ class AuditReportVisualizer(BaseProbe):
         dimensions_config: dict[str, Any],
         entity_name: str,
         output_path: Path,
+        comparators: dict[str, list[str]] | None = None,
     ) -> Path:
         """Generate complete visual report from audit data.
 
@@ -206,6 +209,7 @@ class AuditReportVisualizer(BaseProbe):
                     anchor_b=config["anchor_b"],
                     contextual_prompt=config["contextual_prompt"],
                     entity_name=entity_name,
+                    comparators=comparators or [],
                     drift_score=dim_result["drift_score"],
                 )
                 axis_plots.append((dim_name, (axis_plot, anchors_html)))
@@ -301,6 +305,7 @@ class AuditReportVisualizer(BaseProbe):
         anchor_b: list[str],
         contextual_prompt: str,
         entity_name: str,
+        comparators: dict[str, list[str]],
         drift_score: float,
     ) -> tuple[str, dict]:
         """Create 1D axis plot for a dimension.
@@ -370,6 +375,9 @@ class AuditReportVisualizer(BaseProbe):
         entity_1d = embeddings_1d[n_a + n_b + 2]
 
         # Ensure correct orientation: Legacy (A) should be LEFT, Strategy (B) should be RIGHT
+        centroid_a_1d_orig = centroid_a_1d # Store for comparator logic
+        centroid_b_1d_orig = centroid_b_1d
+        
         if centroid_a_1d > centroid_b_1d:
             points_a = -points_a
             points_b = -points_b
@@ -385,10 +393,51 @@ class AuditReportVisualizer(BaseProbe):
             norm_points_a = (points_a - midpoint_1d) / half_range
             norm_points_b = (points_b - midpoint_1d) / half_range
             norm_entity = (entity_1d - midpoint_1d) / half_range
+            
+            # Process comparators (grouped by type)
+            comparator_results = {}
+            
+            if comparators:
+                # Handle both list (backwards compatibility) and dict
+                groups = comparators if isinstance(comparators, dict) else {"default": comparators}
+                
+                for group_name, group_entities in groups.items():
+                    group_data = {
+                        "norm_positions": [],
+                        "drift_scores": [],
+                        "names": []
+                    }
+                    
+                    for comp in group_entities:
+                        comp_prompt = contextual_prompt.format(entity=comp)
+                        comp_embedding = np.array(self.get_embedding(comp_prompt))
+                        
+                        # Drift Score
+                        comp_relative = comp_embedding - midpoint
+                        if axis_length_sq > 0:
+                            comp_proj = np.dot(comp_relative, axis_vector) / axis_length_sq
+                            comp_drift = float(comp_proj * 2)
+                        else:
+                            comp_drift = 0.0
+                        
+                        # 1D PCA Projection
+                        comp_1d_raw = pca.transform([comp_embedding])[0][0]
+                        if centroid_a_1d_orig > centroid_b_1d_orig:
+                             comp_1d_raw = -comp_1d_raw
+                        
+                        comp_norm = (comp_1d_raw - midpoint_1d) / half_range
+                        
+                        group_data["norm_positions"].append(comp_norm)
+                        group_data["drift_scores"].append(comp_drift)
+                        group_data["names"].append(comp)
+                    
+                    comparator_results[group_name] = group_data
+                    
         else:
             norm_points_a = np.zeros_like(points_a)
             norm_points_b = np.zeros_like(points_b)
             norm_entity = 0.0
+            comparator_results = {}
 
         # Create figure
         fig = go.Figure()
@@ -507,7 +556,44 @@ class AuditReportVisualizer(BaseProbe):
                     f"Drift Score: {calculated_drift:+.4f}"
                     "<extra></extra>"
                 ),
-            )
+        ))
+
+        # Plot Comparators (Grouped)
+        for group_name, data in comparator_results.items():
+            # Determine color and symbol based on group
+            if group_name == "legacy":
+                color = COLORS["comparator_legacy"]
+                symbol = "diamond-open"
+            elif group_name == "strategic":
+                color = COLORS["comparator_strategic"]
+                symbol = "diamond-open"
+            else:
+                color = "#9370DB" # Default purple
+                symbol = "hexagon"
+                
+            fig.add_trace(go.Scatter(
+                x=data["norm_positions"],
+                y=[0] * len(data["names"]),
+                mode="markers+text",
+                marker=dict(
+                    size=20,
+                    color=color,
+                    symbol=symbol,
+                    line=dict(color=color, width=2),
+                    opacity=0.9,
+                ),
+                text=data["names"],
+                textposition="bottom center",
+                textfont=dict(size=10, color=color, family="Arial"),
+                name=f"Comparators ({group_name.title()})",
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    "Position: %{x:.3f}<br>"
+                    "Drift Score: %{customdata:.4f}"
+                    "<extra></extra>"
+                ),
+                customdata=data["drift_scores"]
+                )
         )
 
         # Add vertical lines at key positions
@@ -726,6 +812,9 @@ class AuditReportVisualizer(BaseProbe):
             <div class="legend-item"><div class="legend-dot" style="background:#8B4513"></div> Legacy</div>
             <div class="legend-item"><div class="legend-dot" style="background:#2E8B57"></div> Strategy</div>
             <div class="legend-item"><div class="legend-dot" style="background:#1E90FF"></div> Entity Position</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#1E90FF"></div> Entity Position</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#CD853F"></div> Legacy Peers</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#228B22"></div> Strategic Peers</div>
         </div>
     </div>
     
