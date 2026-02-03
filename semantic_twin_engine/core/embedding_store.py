@@ -11,7 +11,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
 from core.exceptions import APIError
@@ -23,17 +23,34 @@ from tenacity import (
     wait_exponential,
 )
 
+# Conditional import for Mistral
+try:
+    from mistralai.client import MistralClient
+
+    MISTRAL_AVAILABLE = True
+except ImportError:
+    MISTRAL_AVAILABLE = False
+    MistralClient = None
+
 logger = logging.getLogger(__name__)
 
 
 class FakeEmbeddingProvider:
-    """Generates deterministic fake embeddings for testing without OpenAI API calls.
+    """Generates deterministic fake embeddings for testing without API calls.
 
     Produces consistent embeddings based on a seed derived from the text hash.
-    All vectors are 1536-dimensional to match OpenAI's text-embedding-3-small.
+    Default: 1536-dimensional to match OpenAI's text-embedding-3-small.
+    Can be configured for other dimensions (e.g., 1024 for Mistral).
     """
 
     EMBEDDING_DIMENSION = 1536
+
+    @staticmethod
+    def get_dimension_for_model(model: str) -> int:
+        """Get embedding dimension based on model name."""
+        if "mistral" in model.lower():
+            return 1024  # Mistral embeddings are 1024-dimensional
+        return 1536  # OpenAI default
 
     @staticmethod
     def generate_embedding(text: str, model: str) -> np.ndarray:
@@ -46,18 +63,19 @@ class FakeEmbeddingProvider:
         Returns:
             Deterministic fake embedding vector.
         """
+        # Get dimension based on model
+        dimension = FakeEmbeddingProvider.get_dimension_for_model(model)
+
         # Create a stable seed from text and model
         seed_input = f"{model}:{text}".encode()
         seed_hash = int(hashlib.sha256(seed_input).hexdigest(), 16)
         seed = seed_hash % (2**32)  # Keep within int32 range
 
-        # Generate deterministic embedding
+        # Generate deterministic embedding with correct dimension
         rng = np.random.RandomState(seed)
-        embedding = rng.randn(FakeEmbeddingProvider.EMBEDDING_DIMENSION).astype(
-            np.float32
-        )
+        embedding = rng.randn(dimension).astype(np.float32)
 
-        # Normalize to unit vector (matching OpenAI behavior)
+        # Normalize to unit vector (matching API behavior)
         norm = np.linalg.norm(embedding)
         if norm > 0:
             embedding = embedding / norm
@@ -104,15 +122,22 @@ class EmbeddingStore:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        self.model = model or os.getenv(
-            "OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"
-        )
+        # Determine AI provider
+        self.provider = os.getenv("AI_PROVIDER", "openai").lower()
+
+        # Set model based on provider
+        if model:
+            self.model = model
+        elif self.provider == "mistral":
+            self.model = os.getenv("MISTRAL_EMBEDDING_MODEL", "mistral-embed")
+        else:
+            self.model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 
         self._embeddings_path = self.cache_dir / "embeddings.npz"
         self._centroids_path = self.cache_dir / "centroids.npz"
         self._metadata_path = self.cache_dir / "metadata.json"
 
-        self._client: OpenAI | None = None
+        self._client: Union[OpenAI, MistralClient, None] = None
         self._embeddings_cache: dict[str, np.ndarray] = {}
         self._centroids_cache: dict[str, np.ndarray] = {}
         self._dirty_embeddings = False
@@ -120,16 +145,37 @@ class EmbeddingStore:
 
         self._load_cache()
 
+        logger.info(
+            f"Initialized EmbeddingStore with provider={self.provider}, model={self.model}"
+        )
+
     @property
-    def client(self) -> OpenAI:
-        """Lazy initialization of OpenAI client."""
+    def client(self) -> Union[OpenAI, MistralClient]:
+        """Lazy initialization of AI client (OpenAI or Mistral)."""
         if self._client is None:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise APIError(
-                    "OPENAI_API_KEY environment variable not set", service="OpenAI"
-                )
-            self._client = OpenAI(api_key=api_key)
+            if self.provider == "mistral":
+                if not MISTRAL_AVAILABLE:
+                    raise APIError(
+                        "Mistral provider selected but 'mistralai' package is not installed. "
+                        "Install it with: pip install mistralai",
+                        service="Mistral",
+                    )
+                api_key = os.getenv("MISTRAL_API_KEY")
+                if not api_key:
+                    raise APIError(
+                        "MISTRAL_API_KEY environment variable not set",
+                        service="Mistral",
+                    )
+                self._client = MistralClient(api_key=api_key)
+                logger.info("Initialized Mistral client")
+            else:  # default to OpenAI
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise APIError(
+                        "OPENAI_API_KEY environment variable not set", service="OpenAI"
+                    )
+                self._client = OpenAI(api_key=api_key)
+                logger.info("Initialized OpenAI client")
         return self._client
 
     def _compute_hash(self, text: str) -> str:
@@ -244,12 +290,25 @@ class EmbeddingStore:
                 for text in texts
             ]
 
-        response = self.client.embeddings.create(
-            model=self.model,
-            input=texts,
-        )
-        logger.info("Fetched %d embeddings from OpenAI API", len(texts))
-        return [np.array(item.embedding) for item in response.data]
+        # Call appropriate API based on provider
+        if self.provider == "mistral":
+            response = self.client.embeddings(
+                model=self.model,
+                input=texts,
+            )
+            logger.info("Fetched %d embeddings from Mistral API", len(texts))
+            return [
+                np.array(item.embedding, dtype=np.float32) for item in response.data
+            ]
+        else:  # OpenAI
+            response = self.client.embeddings.create(
+                model=self.model,
+                input=texts,
+            )
+            logger.info("Fetched %d embeddings from OpenAI API", len(texts))
+            return [
+                np.array(item.embedding, dtype=np.float32) for item in response.data
+            ]
 
     def get_embedding(self, text: str) -> np.ndarray:
         """Get embedding for a single text, using cache if available.

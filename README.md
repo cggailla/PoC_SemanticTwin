@@ -16,7 +16,7 @@ This Proof of Concept (PoC) is a SaaS Backend engine designed to probe Large Lan
 ## 📋 Prerequisites
 
 - **Python 3.10+**
-- An **OpenAI API Key**
+- An **OpenAI API Key** OR **Mistral API Key**
 
 ## 🛠️ Installation
 
@@ -46,10 +46,31 @@ This Proof of Concept (PoC) is a SaaS Backend engine designed to probe Large Lan
     ```
 
 4.  **Configure Environment Variables:**
-    Create a `.env` file in the `semantic_twin_engine` directory (or root if supported by config loader) based on your needs.
+    Create a `.env` file in the `semantic_twin_engine` directory:
+
     ```bash
-    # semantic_twin_engine/.env
-    OPENAI_API_KEY=sk-...
+    # Copy example file
+    cp semantic_twin_engine/.env.example semantic_twin_engine/.env
+    ```
+
+    Then edit `.env` and configure your AI provider:
+
+    **For OpenAI:**
+
+    ```bash
+    AI_PROVIDER=openai
+    OPENAI_API_KEY=sk-your-key-here
+    OPENAI_MODEL=gpt-4o
+    OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+    ```
+
+    **For Mistral:**
+
+    ```bash
+    AI_PROVIDER=mistral
+    MISTRAL_API_KEY=your-mistral-key-here
+    MISTRAL_MODEL=mistral-large-latest
+    MISTRAL_EMBEDDING_MODEL=mistral-embed
     ```
 
 ## 🏃 Usage

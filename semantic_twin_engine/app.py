@@ -2,10 +2,12 @@
 Flask backend API for Semantic Twin Engine.
 
 This module provides REST endpoints for creating and managing semantic twin audits.
+Supports both OpenAI and Mistral AI providers.
 """
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -116,7 +118,7 @@ def create_settings_from_request(data: Dict[str, Any]) -> Settings:
             params=data.get(
                 "vector_probe_params",
                 {
-                    "embedding_dimensions": 1536,
+                    "embedding_dimensions": default_dimensions,
                     "top_k_anchors": 5,
                     "dimensions": {
                         "default": {
@@ -145,10 +147,22 @@ def create_settings_from_request(data: Dict[str, Any]) -> Settings:
         "logit_probe": ProbeConfig(enabled=False),
     }
 
-    # Create OpenAI config
+    # Create OpenAI config (supports both OpenAI and Mistral)
+    provider = os.getenv("AI_PROVIDER", "openai").lower()
+
+    # Determine default models based on provider
+    if provider == "mistral":
+        default_model = "mistral-large-latest"
+        default_embedding_model = "mistral-embed"
+        default_dimensions = 1024  # Mistral embeddings are 1024-dimensional
+    else:  # openai
+        default_model = "gpt-4o"
+        default_embedding_model = "text-embedding-3-small"
+        default_dimensions = 1536  # OpenAI embeddings are 1536-dimensional
+
     openai_config = OpenAIConfig(
-        model=data.get("model", "gpt-4o"),
-        embedding_model=data.get("embedding_model", "text-embedding-3-small"),
+        model=data.get("model", default_model),
+        embedding_model=data.get("embedding_model", default_embedding_model),
         temperature=0.0,  # Always deterministic
         seed=42,
         max_retries=3,
@@ -620,4 +634,5 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    port = int(os.getenv("FLASK_PORT", 5001))
+    app.run(debug=True, host="0.0.0.0", port=port)
